@@ -50,12 +50,6 @@ export interface ProxyKeySpec {
   status?: 'Enabled' | 'Disabled';
   /** Model allowlist — must be a subset of the group channels' models (if set) */
   models?: string[];
-  /** Lifetime cost quota. 0 = unlimited. */
-  quota?: number;
-  /** Period cost quota. 0 = unlimited. */
-  periodQuota?: number;
-  /** Quota reset period. Default monthly. */
-  periodType?: 'daily' | 'weekly' | 'monthly';
   /** Allowed client IP CIDRs. Empty = all IPs allowed. */
   subnets?: string[];
 }
@@ -68,9 +62,7 @@ export interface ProxyKeyStatus {
   keyHash?: string;
   /** Name of the tenant Secret holding the raw key */
   secretName?: string;
-  /** Tracked cost usage (updated by relay) */
-  usedAmount?: number;
-  /** Tracked request count (updated by relay) */
+  /** Tracked request count (in-memory, resets on restart) */
   requestCount?: number;
 }
 

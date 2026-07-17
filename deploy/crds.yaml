@@ -155,14 +155,6 @@ spec:
                   type: array
                   items:
                     type: string
-                quota:
-                  type: number
-                periodQuota:
-                  type: number
-                periodType:
-                  type: string
-                  enum: [daily, weekly, monthly]
-                  default: monthly
                 subnets:
                   type: array
                   items:
@@ -198,8 +190,6 @@ spec:
                   type: string
                 secretName:
                   type: string
-                usedAmount:
-                  type: number
                 requestCount:
                   type: integer
 ---

@@ -65,9 +65,6 @@ metadata:
 spec:
   status: Enabled
   models: [gpt-4o-mini]
-  quota: 100
-  periodQuota: 50
-  periodType: monthly
   subnets: [10.0.0.0/8]
 ---
 # 6. Another key in the same tenant namespace

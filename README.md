@@ -81,8 +81,6 @@ metadata:
   namespace: my-team          # must match a Group named "my-team"
 spec:
   models: [gpt-4o-mini]
-  quota: 100          # optional: lifetime cost limit
-  periodType: monthly # optional: daily | weekly | monthly
 EOF
 ```
 
@@ -109,7 +107,6 @@ curl -X POST http://llmproxy.llmproxy-system:8000/v1/chat/completions \
 - **Virtual API keys** — tenants never see your real provider keys
 - **Per-tenant isolation** — each ProxyKey lives in the tenant's namespace with its own Secret
 - **Model allowlists** — restrict which models each key can access
-- **Quota limits** — lifetime and period-based cost quotas
 - **IP restrictions** — limit keys to specific CIDR ranges
 - **Priority-weighted routing** — distribute load across multiple channels within a group
 - **Automatic retry** — fails over to alternate channels on upstream errors
