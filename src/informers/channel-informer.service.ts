@@ -3,6 +3,7 @@ import { makeInformer, type KubernetesListObject } from '@kubernetes/client-node
 import { K8sService } from '../k8s/k8s.service.js';
 import { AppConfig } from '../common/config.js';
 import { RegistryService } from '../registry/registry.service.js';
+import { MetricsService } from '../metrics/metrics.service.js';
 import { GROUP, VERSION, CHANNEL_PLURAL, type Channel } from '../common/types.js';
 
 @Injectable()
@@ -11,6 +12,7 @@ export class ChannelInformerService implements OnModuleInit {
     private readonly k8s: K8sService,
     private readonly config: AppConfig,
     private readonly registry: RegistryService,
+    private readonly metrics: MetricsService,
   ) {}
 
   async onModuleInit(): Promise<void> {
@@ -49,6 +51,19 @@ export class ChannelInformerService implements OnModuleInit {
     } catch (err) {
       this.registry.upsertChannel(ch, undefined);
       console.error(`channel ${ch.metadata!.name}: cannot read upstream secret:`, String(err));
+    } finally {
+      this.refreshGauges();
+    }
+  }
+
+  private refreshGauges(): void {
+    const byType: Record<string, number> = {};
+    for (const e of this.registry.getAllChannels()) {
+      const t = e.channel.spec.type ?? 'unknown';
+      byType[t] = (byType[t] ?? 0) + 1;
+    }
+    for (const [type, count] of Object.entries(byType)) {
+      this.metrics.channelsActive.set({ type }, count);
     }
   }
 }

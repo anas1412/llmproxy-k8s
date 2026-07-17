@@ -7,7 +7,6 @@ export class MetricsService {
 
   readonly requestsTotal: prom.Counter;
   readonly tokensTotal: prom.Counter;
-  readonly costDollarsTotal: prom.Counter;
   readonly errorsTotal: prom.Counter;
   readonly rateLimitedTotal: prom.Counter;
   readonly keysMintedTotal: prom.Counter;
@@ -36,13 +35,6 @@ export class MetricsService {
       name: 'llmproxy_tokens_total',
       help: 'Total tokens processed',
       labelNames: ['channel', 'model', 'group', 'type'],
-      registers: [this._registry],
-    });
-
-    this.costDollarsTotal = new prom.Counter({
-      name: 'llmproxy_cost_dollars_total',
-      help: 'Total estimated cost in USD',
-      labelNames: ['channel', 'model', 'group'],
       registers: [this._registry],
     });
 

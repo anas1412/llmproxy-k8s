@@ -29,6 +29,7 @@ export class ReconcilerService {
   handleDelete(pk: ProxyKey): void {
     this.registry.evictRouteByUid(pk.metadata!.uid!);
     this.queue.delete(`${pk.metadata!.namespace}/${pk.metadata!.name}`);
+    this.refreshProxyKeyGauge();
   }
 
   private async drain(): Promise<void> {
@@ -110,6 +111,20 @@ export class ReconcilerService {
 
     if (pk.status?.keyHash !== keyHash || pk.status?.ready !== true || pk.status?.secretName !== secretName) {
       await this.setStatus(pk, { ready: true, message: 'Active', keyHash, secretName });
+    }
+
+    this.refreshProxyKeyGauge();
+  }
+
+  private refreshProxyKeyGauge(): void {
+    const byChannel: Record<string, number> = {};
+    for (const r of this.registry.getAllRoutes()) {
+      const ch = r.groupName;
+      byChannel[ch] = (byChannel[ch] ?? 0) + 1;
+    }
+    // Reset all, then set current
+    for (const [channel, count] of Object.entries(byChannel)) {
+      this.metrics.proxykeysActive.set({ channel }, count);
     }
   }
 

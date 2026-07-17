@@ -77,6 +77,7 @@ export class RelayService {
 
     const pkKey = `${route.namespace}/${route.proxyKeyName}`;
     if (!this.rateLimiter.checkRPM(pkKey, 0)) {
+      this.metrics.rateLimitedTotal.inc({ channel: route.groupName, tier: 'rpm', reason: 'rate_limit' });
       return { statusCode: 429, success: false, channel: route.groupName, model,
         inputTokens: 0, outputTokens: 0, latencyMs: 0, ttfbMs: 0, errorType: 'rate_limit', retries: 0 };
     }
@@ -151,10 +152,15 @@ export class RelayService {
               const chunks: Buffer[] = [];
               upRes.on('data', (chunk: Buffer) => chunks.push(chunk));
               upRes.on('end', () => {
+                const upstreamMs = Date.now() - upstreamStart;
                 const responseBody = Buffer.concat(chunks).toString('utf8');
                 res.writeHead(upRes.statusCode ?? 502, upRes.headers);
                 res.end(responseBody);
                 const usage = this.extractUsage(responseBody);
+                this.metrics.upstreamDuration.observe(
+                  { channel: channel.metadata!.name!, model },
+                  upstreamMs / 1000,
+                );
                 resolve({
                   statusCode: upRes.statusCode ?? 502,
                   success: (upRes.statusCode ?? 502) < 400,
@@ -167,6 +173,11 @@ export class RelayService {
               res.writeHead(upRes.statusCode ?? 502, upRes.headers);
               upRes.pipe(res);
               upRes.on('end', () => {
+                const upstreamMs = Date.now() - upstreamStart;
+                this.metrics.upstreamDuration.observe(
+                  { channel: channel.metadata!.name!, model },
+                  upstreamMs / 1000,
+                );
                 resolve({
                   statusCode: upRes.statusCode ?? 502,
                   success: (upRes.statusCode ?? 502) < 400,
@@ -180,19 +191,23 @@ export class RelayService {
 
         proxied.on('timeout', () => {
           proxied.destroy(new Error('upstream timeout'));
+          this.metrics.channelsErrors.inc({ channel: channel.metadata!.name! });
           resolve({ statusCode: 504, success: false, channel: channel.metadata!.name!, model,
             inputTokens: 0, outputTokens: 0, latencyMs: Date.now() - startTime, ttfbMs, errorType: 'upstream_timeout', retries: 0 });
         });
 
         proxied.on('error', (err: Error) => {
           console.error(`upstream error [${route.namespace}/${route.proxyKeyName} -> ${channel.metadata!.name}]:`, err.message);
+          this.metrics.channelsErrors.inc({ channel: channel.metadata!.name! });
           resolve({ statusCode: 502, success: false, channel: channel.metadata!.name!, model,
             inputTokens: 0, outputTokens: 0, latencyMs: Date.now() - startTime, ttfbMs, errorType: 'upstream_error', retries: 0 });
         });
 
         res.on('close', () => proxied.destroy());
+        const upstreamStart = Date.now();
         proxied.end(upstreamBody);
       } catch (err) {
+        this.metrics.channelsErrors.inc({ channel: channel.metadata!.name! });
         resolve({ statusCode: 500, success: false, channel: channel.metadata!.name!, model,
           inputTokens: 0, outputTokens: 0, latencyMs: Date.now() - startTime, ttfbMs, errorType: 'internal_error', retries: 0 });
       }

@@ -164,14 +164,16 @@ Scrape `http://llmproxy.llmproxy-system:8081/metrics`:
 |--------|------|--------|
 | `llmproxy_requests_total` | Counter | channel, model, group, proxykey_ns, proxykey_name, status_code |
 | `llmproxy_tokens_total` | Counter | channel, model, group, type |
-| `llmproxy_cost_dollars_total` | Counter | channel, model, group |
 | `llmproxy_errors_total` | Counter | channel, model, group, error_type |
 | `llmproxy_rate_limited_total` | Counter | channel, tier, reason |
 | `llmproxy_request_duration_seconds` | Histogram | channel, model |
 | `llmproxy_ttfb_seconds` | Histogram | channel, model |
+| `llmproxy_upstream_duration_seconds` | Histogram | channel, model |
 | `llmproxy_retries_total` | Counter | channel |
 | `llmproxy_keys_minted_total` | Counter | channel |
 | `llmproxy_channels_active` | Gauge | type |
+| `llmproxy_proxykeys_active` | Gauge | channel |
+| `llmproxy_channels_errors` | Gauge | channel |
 
 ## API reference
 
