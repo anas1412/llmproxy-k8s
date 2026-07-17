@@ -55,14 +55,14 @@ spec:
   rpmRatio: 1.0
   tpmRatio: 1.0
 ---
-# 5. Tenant ProxyKey — operator creates Secret "my-app-llmproxy" in ns "my-team"
+# 5. Tenant ProxyKey — group is always the namespace name ("my-team")
+#     operator creates Secret "my-app-llmproxy" in ns "my-team"
 apiVersion: llmproxy.llmproxy.io/v1alpha1
 kind: ProxyKey
 metadata:
   name: my-app
   namespace: my-team
 spec:
-  groupRef: my-team
   status: Enabled
   models: [gpt-4o-mini]
   quota: 100
@@ -70,13 +70,12 @@ spec:
   periodType: monthly
   subnets: [10.0.0.0/8]
 ---
-# 6. ProxyKey for Anthropic via same group — creates Secret "my-app-claude-llmproxy" in ns "my-team"
+# 6. Another key in the same tenant namespace
 apiVersion: llmproxy.llmproxy.io/v1alpha1
 kind: ProxyKey
 metadata:
   name: my-app-claude
   namespace: my-team
 spec:
-  groupRef: my-team
   status: Enabled
   models: [claude-haiku-4-5]

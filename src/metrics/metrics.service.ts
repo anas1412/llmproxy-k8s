@@ -28,28 +28,28 @@ export class MetricsService {
     this.requestsTotal = new prom.Counter({
       name: 'llmproxy_requests_total',
       help: 'Total relay requests',
-      labelNames: ['channel', 'model', 'proxykey_ns', 'proxykey_name', 'status_code'],
+      labelNames: ['channel', 'model', 'group', 'proxykey_ns', 'proxykey_name', 'status_code'],
       registers: [this._registry],
     });
 
     this.tokensTotal = new prom.Counter({
       name: 'llmproxy_tokens_total',
       help: 'Total tokens processed',
-      labelNames: ['channel', 'model', 'type'],
+      labelNames: ['channel', 'model', 'group', 'type'],
       registers: [this._registry],
     });
 
     this.costDollarsTotal = new prom.Counter({
       name: 'llmproxy_cost_dollars_total',
       help: 'Total estimated cost in USD',
-      labelNames: ['channel', 'model'],
+      labelNames: ['channel', 'model', 'group'],
       registers: [this._registry],
     });
 
     this.errorsTotal = new prom.Counter({
       name: 'llmproxy_errors_total',
       help: 'Total relay errors',
-      labelNames: ['channel', 'model', 'error_type'],
+      labelNames: ['channel', 'model', 'group', 'error_type'],
       registers: [this._registry],
     });
 

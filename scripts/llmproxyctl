@@ -1,0 +1,97 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+API_SERVER="${LLMPROXY_SERVER:-http://localhost:8000}"
+ADMIN_KEY="${ADMIN_KEY:-admin-change-me}"
+H() { curl -s -H "Authorization: Bearer $ADMIN_KEY" "$@"; }
+
+die()  { echo "ERROR: $*" >&2; exit 1; }
+usage() {
+  cat <<'EOF'
+Usage: llmproxyctl <command> [args]
+
+Commands:
+  status              Overall summary (channels, groups, keys)
+  status channels     List channels: name, type, models
+  status groups       List groups: name, status, channels
+  status keys         List proxy keys: namespace, name, group
+
+  test channel <name>         Test a channel (check key + type)
+  test channel <name> <model> Test a specific model on a channel (real request)
+
+  channel <name>              Show channel details
+  group <name>                Show group details
+
+Env vars: LLMPROXY_SERVER (default http://localhost:8000)
+          LLMPROXY_ADMIN_KEY (default admin-change-me)
+EOF
+  exit 0
+}
+
+cmd="${1:-}"
+shift 2>/dev/null || true
+
+# ---- status ----
+if [ "$cmd" = "status" ]; then
+  sub="${1:-}"
+  data=$(H "$API_SERVER/api/status")
+  [ -n "$data" ] || die "no response from $API_SERVER"
+
+  if [ "$sub" = "channels" ]; then
+    printf "%-20s %-12s %s\n" NAME TYPE MODELS
+    echo "$data" | jq -r '.channels[] | [.name, .type, (.models | join(","))] | @tsv' | column -t -s$'\t'
+  elif [ "$sub" = "groups" ]; then
+    printf "%-20s %-10s %s\n" NAME STATUS CHANNELS
+    echo "$data" | jq -r '.groups[] | [.name, .status, (.channels | join(","))] | @tsv' | column -t -s$'\t'
+  elif [ "$sub" = "keys" ]; then
+    printf "%-15s %-20s %s\n" NAMESPACE NAME GROUP
+    echo "$data" | jq -r '.keys[] | [.namespace, .name, .group] | @tsv' | column -t -s$'\t'
+  else
+    ch_count=$(echo "$data" | jq '.channels | length')
+    gr_count=$(echo "$data" | jq '.groups | length')
+    key_count=$(echo "$data" | jq '.keys | length')
+    printf "channels: %d  groups: %d  keys: %d\n" "$ch_count" "$gr_count" "$key_count"
+    echo ""
+    printf "%-20s %-12s %s\n" CHANNELS TYPE READY
+    echo "$data" | jq -r '.channels[] | [.name, .type, (if .ready then "✓" else "✗" end)] | @tsv' | column -t -s$'\t'
+    echo ""
+    printf "%-20s %-10s %s\n" GROUPS STATUS CHANNELS
+    echo "$data" | jq -r '.groups[] | [.name, .status, (.channels | join(","))] | @tsv' | column -t -s$'\t'
+    echo ""
+    printf "%-15s %-20s %s\n" KEYS GROUP
+    echo "$data" | jq -r '.keys[] | [.namespace + "/" + .name, .group] | @tsv' | column -t -s$'\t'
+  fi
+
+# ---- test channel ----
+elif [ "$cmd" = "test" ]; then
+  sub="${1:-}"; name="${2:-}"; model="${3:-}"
+  if [ "$sub" != "channel" ] || [ -z "$name" ]; then
+    echo "Usage: llmproxyctl test channel <name> [model]" >&2; exit 1
+  fi
+  if [ -n "$model" ]; then
+    echo "Testing channel '$name' model '$model'..."
+    H -X POST "$API_SERVER/api/v1/channels/$name/test" | jq .
+  else
+    resp=$(H "$API_SERVER/api/v1/channels/$name/test")
+    echo "$resp" | jq .
+  fi
+
+# ---- channel details ----
+elif [ "$cmd" = "channel" ]; then
+  name="${1:-}"
+  [ -z "$name" ] && die "usage: llmproxyctl channel <name>"
+  H "$API_SERVER/api/v1/channels/$name" | jq .
+
+# ---- group details ----
+elif [ "$cmd" = "group" ]; then
+  name="${1:-}"
+  [ -z "$name" ] && die "usage: llmproxyctl group <name>"
+  data=$(H "$API_SERVER/api/status")
+  echo "$data" | jq --arg name "$name" '.groups[] | select(.name == $name)'
+
+# ---- help ----
+elif [ "$cmd" = "help" ] || [ "$cmd" = "-h" ] || [ "$cmd" = "--help" ]; then
+  usage
+else
+  usage
+fi

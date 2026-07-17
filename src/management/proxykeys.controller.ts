@@ -15,9 +15,12 @@ export class ProxyKeysController {
   ) {}
 
   @Get()
-  list(): Array<{ namespace: string; name: string; channelRef: string; ready: boolean }> {
-    // ProxyKeys are cluster-scoped — return active routes from registry
-    return this.registry.getAllChannels().map(() => []) && [];
+  list(): Array<{ namespace: string; name: string; groupRef: string }> {
+    return this.registry.getAllRoutes().map((r) => ({
+      namespace: r.namespace,
+      name: r.proxyKeyName,
+      groupRef: r.groupName,
+    }));
   }
 
   @Get(':ns/:name')

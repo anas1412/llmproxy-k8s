@@ -56,6 +56,19 @@ export class K8sService implements OnModuleInit {
     }) as Promise<KubernetesListObject<ProxyKey>>;
   }
 
+  listGroups(ns: string): Promise<KubernetesListObject<Group>> {
+    return this._custom.listNamespacedCustomObject({
+      group: GROUP, version: VERSION, namespace: ns, plural: GROUP_PLURAL,
+    }) as Promise<KubernetesListObject<Group>>;
+  }
+
+  async patchGroupStatus(ns: string, name: string, status: NonNullable<Group['status']>): Promise<void> {
+    await this._custom.patchNamespacedCustomObjectStatus(
+      { group: GROUP, version: VERSION, namespace: ns, plural: GROUP_PLURAL, name, body: { status } },
+      setHeaderOptions('Content-Type', PatchStrategy.MergePatch),
+    ) as unknown as Promise<void>;
+  }
+
   async patchProxyKeyStatus(ns: string, name: string, status: NonNullable<ProxyKey['status']>): Promise<void> {
     await this._custom.patchNamespacedCustomObjectStatus(
       { group: GROUP, version: VERSION, namespace: ns, plural: PROXYKEY_PLURAL, name, body: { status } },

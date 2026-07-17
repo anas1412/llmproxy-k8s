@@ -36,6 +36,22 @@ export class ChannelPickerService {
     return eligible[eligible.length - 1];
   }
 
+  /** Pick a channel scoped to a group's channelRefs, weighted by priority */
+  pickFromGroup(groupName: string, model?: string): ChannelEntry | undefined {
+    const groupChannels = this.registry.getGroupChannels(groupName);
+    if (groupChannels.length === 0) return undefined;
+
+    let entries = groupChannels;
+    if (model) {
+      entries = entries.filter((e) => {
+        const models = e.channel.spec.models;
+        if (!models || models.length === 0) return true;
+        return models.includes(model);
+      });
+    }
+    return this.pick(entries);
+  }
+
   /** Pick a primary channel and return fallbacks (for retry) */
   pickWithFallbacks(model?: string): { primary: ChannelEntry | undefined; fallbacks: ChannelEntry[] } {
     let entries = this.registry.getEnabledChannels();

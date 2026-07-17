@@ -1,20 +1,22 @@
 import { Injectable } from '@nestjs/common';
-import type { Channel } from '../common/types.js';
-import type { Route, ChannelEntry } from '../common/types.js';
+import type { Channel, Group } from '../common/types.js';
+import type { Route, ChannelEntry, GroupEntry } from '../common/types.js';
 
 /**
  * In-memory routing table built entirely from informer events.
  * No persistence — rebuilt on restart via informer initial lists.
  *
- * Two maps:
+ * Three maps:
  *   keyHash → Route        (for auth lookups on every request)
  *   channelName → ChannelEntry  (for channel metadata + resolved upstream key)
+ *   groupName → GroupEntry (for tenant definitions)
  */
 @Injectable()
 export class RegistryService {
   private routes = new Map<string, Route>();
   private byUid = new Map<string, string>(); // ProxyKey uid → keyHash
   private channels = new Map<string, ChannelEntry>();
+  private groups = new Map<string, GroupEntry>();
 
   // -- Route management (ProxyKey lifecycle) ---------------------------------
 
@@ -31,6 +33,11 @@ export class RegistryService {
       this.routes.delete(hash);
       this.byUid.delete(uid);
     }
+  }
+
+  /** All active routes */
+  getAllRoutes(): Route[] {
+    return [...this.routes.values()];
   }
 
   /** Look up a route by hashed virtual key — called on every request */
@@ -64,9 +71,38 @@ export class RegistryService {
     );
   }
 
+  // -- Group management -------------------------------------------------------
+
+  upsertGroup(group: Group): void {
+    this.groups.set(group.metadata!.name!, { group });
+  }
+
+  evictGroup(name: string): void {
+    this.groups.delete(name);
+  }
+
+  getGroup(name: string): GroupEntry | undefined {
+    return this.groups.get(name);
+  }
+
+  /** All groups in the registry */
+  getAllGroups(): GroupEntry[] {
+    return [...this.groups.values()];
+  }
+
+  /** Returns enabled ChannelEntries that belong to the group's channelRefs */
+  getGroupChannels(groupName: string): ChannelEntry[] {
+    const group = this.groups.get(groupName);
+    if (!group) return [];
+    const refs = group.group.spec.channelRefs ?? [];
+    return refs
+      .map((name) => this.channels.get(name))
+      .filter((e): e is ChannelEntry => !!e && (e.channel.spec.status ?? 'Enabled') === 'Enabled' && !!e.upstreamKey);
+  }
+
   // -- Stats for health/metrics -----------------------------------------------
 
-  stats(): { routes: number; channels: number } {
-    return { routes: this.routes.size, channels: this.channels.size };
+  stats(): { routes: number; channels: number; groups: number } {
+    return { routes: this.routes.size, channels: this.channels.size, groups: this.groups.size };
   }
 }

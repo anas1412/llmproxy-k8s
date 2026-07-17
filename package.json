@@ -3,6 +3,9 @@
   "version": "1.0.0",
   "description": "Production LLM Proxy Operator — NestJS",
   "main": "dist/main.js",
+  "bin": {
+    "llmproxyctl": "./scripts/llmproxyctl"
+  },
   "type": "module",
   "scripts": {
     "build": "nest build",

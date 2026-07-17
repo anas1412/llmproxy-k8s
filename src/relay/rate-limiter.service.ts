@@ -20,16 +20,19 @@ export class RateLimiterService {
   private rpm = new Map<string, Window>(); // key|channel → window
   private tpm = new Map<string, Window>();
 
-  /** Check RPM for a given key. Returns true if allowed. */
-  checkRPM(key: string, limit: number): boolean {
+  /** Check RPM for a given key. Returns true if allowed.
+   *  @param ratio multiplier from group config (1.0 = no change, 0.5 = half, 2.0 = double) */
+  checkRPM(key: string, limit: number, ratio = 1.0): boolean {
     if (limit <= 0) return true;
-    return this.check(key, limit, this.rpm);
+    const effectiveLimit = Math.max(1, Math.round(limit * ratio));
+    return this.check(key, effectiveLimit, this.rpm);
   }
 
   /** Check TPM for a given key. Returns true if allowed. */
-  checkTPM(key: string, tokenCount: number, limit: number): boolean {
+  checkTPM(key: string, tokenCount: number, limit: number, ratio = 1.0): boolean {
     if (limit <= 0) return true;
-    return this.check(key, limit, this.tpm, tokenCount);
+    const effectiveLimit = Math.max(1, Math.round(limit * ratio));
+    return this.check(key, effectiveLimit, this.tpm, tokenCount);
   }
 
   /** Record a request for RPM tracking */

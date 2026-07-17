@@ -127,9 +127,6 @@ spec:
       subresources:
         status: {}
       additionalPrinterColumns:
-        - name: Group
-          type: string
-          jsonPath: .spec.groupRef
         - name: Status
           type: string
           jsonPath: .spec.status
@@ -149,10 +146,7 @@ spec:
           properties:
             spec:
               type: object
-              required: [groupRef]
               properties:
-                groupRef:
-                  type: string
                 status:
                   type: string
                   enum: [Enabled, Disabled]

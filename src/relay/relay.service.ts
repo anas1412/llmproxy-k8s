@@ -66,22 +66,21 @@ export class RelayService {
     const startTime = Date.now();
     const model = extractModelFromBody(body) ?? 'unknown';
 
-    const entry = this.registry.getChannel(route.channelName);
-    if (!entry?.upstreamKey) {
-      return { statusCode: 503, success: false, channel: route.channelName, model,
-        inputTokens: 0, outputTokens: 0, latencyMs: 0, ttfbMs: 0, errorType: 'channel_unavailable', retries: 0 };
+    const groupChannels = this.registry.getGroupChannels(route.groupName);
+    const primary = this.channelPicker.pickFromGroup(route.groupName, model);
+    if (!primary) {
+      return { statusCode: 503, success: false, channel: route.groupName, model,
+        inputTokens: 0, outputTokens: 0, latencyMs: 0, ttfbMs: 0, errorType: 'no_channel_available', retries: 0 };
     }
+
+    const channels = [primary, ...groupChannels.filter((e) => e !== primary)];
 
     const pkKey = `${route.namespace}/${route.proxyKeyName}`;
     if (!this.rateLimiter.checkRPM(pkKey, 0)) {
-      return { statusCode: 429, success: false, channel: route.channelName, model,
+      return { statusCode: 429, success: false, channel: route.groupName, model,
         inputTokens: 0, outputTokens: 0, latencyMs: 0, ttfbMs: 0, errorType: 'rate_limit', retries: 0 };
     }
 
-    const fallbacks = this.registry.getEnabledChannels()
-      .filter((e) => e.channel.metadata!.name !== route.channelName);
-
-    const channels = [entry, ...fallbacks];
     let lastResult: RelayResult | null = null;
 
     for (let i = 0; i < Math.min(channels.length, 3); i++) {
@@ -95,7 +94,7 @@ export class RelayService {
       if (result.statusCode !== 429 && result.statusCode < 500) break;
     }
 
-    const final = lastResult ?? { statusCode: 502, success: false, channel: route.channelName, model,
+    const final = lastResult ?? { statusCode: 502, success: false, channel: route.groupName, model,
       inputTokens: 0, outputTokens: 0, latencyMs: Date.now() - startTime, ttfbMs: 0, errorType: 'all_channels_failed', retries: 0 };
     this.recordMetrics(route, final);
     return final;
@@ -223,7 +222,8 @@ export class RelayService {
   }
 
   private recordMetrics(route: Route, result: RelayResult): void {
-    const labels = { channel: result.channel, model: result.model };
+    const groupLabel = route.groupName ?? '';
+    const labels = { channel: result.channel, model: result.model, group: groupLabel };
     const fullLabels = { ...labels, proxykey_ns: route.namespace, proxykey_name: route.proxyKeyName };
 
     this.metrics.requestsTotal.inc({ ...fullLabels, status_code: String(result.statusCode) });

@@ -46,8 +46,6 @@ export interface Channel extends KubernetesObject {
 // ---- ProxyKey CRD ----------------------------------------------------------
 
 export interface ProxyKeySpec {
-  /** Name of the Group CR in the operator namespace (tenant definition) */
-  groupRef: string;
   /** Enabled | Disabled. Default Enabled. */
   status?: 'Enabled' | 'Disabled';
   /** Model allowlist — must be a subset of the group channels' models (if set) */
@@ -124,7 +122,7 @@ export interface Group extends KubernetesObject {
 
 // ---- Registry types --------------------------------------------------------
 
-/** A route in the in-memory registry — maps a hashed virtual key to a group */
+/** A route in the in-memory registry — maps a hashed virtual key to its group */
 export interface Route {
   keyHash: string;
   groupName: string;

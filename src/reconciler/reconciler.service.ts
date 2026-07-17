@@ -54,26 +54,30 @@ export class ReconcilerService {
   private async reconcile(pk: ProxyKey): Promise<void> {
     const ns = pk.metadata!.namespace!;
     const name = pk.metadata!.name!;
+    const uid = pk.metadata!.uid!;
     const secretName = `${name}-llmproxy`;
-
-    const entry = this.registry.getChannel(pk.spec.channelRef);
-    if (!entry) {
-      await this.setStatus(pk, {
-        ready: false,
-        message: `channel "${pk.spec.channelRef}" not found`,
-      });
-      this.registry.evictRouteByUid(pk.metadata!.uid!);
+    // Group is always the ProxyKey's namespace — tenant can't override
+    const groupRef = ns;
+    const groupEntry = this.registry.getGroup(groupRef);
+    if (!groupEntry) {
+      await this.setStatus(pk, { ready: false, message: `group "${groupRef}" not found` });
+      this.registry.evictRouteByUid(uid);
       return;
     }
-
-    const channelModels = entry.channel.spec.models;
-    let models = pk.spec.models;
-    if (models && channelModels?.length) {
-      models = models.filter((m) => channelModels.includes(m));
-    } else if (!models) {
-      models = channelModels;
+    if ((groupEntry.group.spec.status ?? 'Enabled') !== 'Enabled') {
+      await this.setStatus(pk, { ready: false, message: `group "${groupRef}" is disabled` });
+      this.registry.evictRouteByUid(uid);
+      return;
     }
+    const groupChannels = this.registry.getGroupChannels(groupRef);
+    if (groupChannels.length === 0) {
+      await this.setStatus(pk, { ready: false, message: `group "${groupRef}" has no enabled channels` });
+      this.registry.evictRouteByUid(uid);
+      return;
+    }
+    const primaryChannel = groupChannels[0].channel.metadata!.name!;
 
+    // Mint virtual key
     let keyHash = pk.status?.keyHash;
     let secret: V1Secret | undefined;
     try {
@@ -88,20 +92,20 @@ export class ReconcilerService {
     if (!secret || !secretHash || (keyHash && secretHash !== keyHash)) {
       const virtualKey = generateVirtualKey();
       keyHash = hashKey(virtualKey);
-      const body = this.buildSecret(pk, secretName, virtualKey);
+      const body = this.buildSecret(pk, secretName, virtualKey, primaryChannel, groupRef);
       await this.k8s.createOrReplaceSecret(ns, secretName, body);
-      console.log(`minted key for ${ns}/${name} -> secret ${secretName}`);
-      this.metrics.keysMintedTotal.inc({ channel: pk.spec.channelRef });
+      console.log(`minted key for ${ns}/${name} -> secret ${secretName} (group: ${groupRef})`);
+      this.metrics.keysMintedTotal.inc({ channel: primaryChannel });
     } else if (!keyHash) {
       keyHash = secretHash;
     }
 
-    this.registry.upsertRoute(pk.metadata!.uid!, {
+    this.registry.upsertRoute(uid, {
       keyHash,
-      channelName: pk.spec.channelRef,
+      groupName: groupRef,
       namespace: ns,
       proxyKeyName: name,
-      models: models?.length ? models : undefined,
+      models: pk.spec.models?.length ? pk.spec.models : undefined,
     });
 
     if (pk.status?.keyHash !== keyHash || pk.status?.ready !== true || pk.status?.secretName !== secretName) {
@@ -109,7 +113,7 @@ export class ReconcilerService {
     }
   }
 
-  private buildSecret(pk: ProxyKey, secretName: string, virtualKey: string): V1Secret {
+  private buildSecret(pk: ProxyKey, secretName: string, virtualKey: string, channel: string, groupRef: string): V1Secret {
     return {
       metadata: {
         name: secretName,
@@ -128,7 +132,8 @@ export class ReconcilerService {
       stringData: {
         LLMPROXY_KEY: virtualKey,
         LLMPROXY_ENDPOINT: this.config.proxyURL,
-        LLMPROXY_CHANNEL: pk.spec.channelRef,
+        LLMPROXY_CHANNEL: channel,
+        LLMPROXY_GROUP: groupRef,
       },
     };
   }

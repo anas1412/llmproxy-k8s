@@ -4,16 +4,19 @@ A lightweight Kubernetes-native LLM proxy — give your tenants API keys that fo
 
 ## How it works
 
-1. **You** create a `Channel` CRD in the operator namespace with your real provider API key
-2. **Your tenants** create `ProxyKey` CRDs in their own namespaces
-3. **llmproxy** mints a virtual API key for each ProxyKey, stores it in a tenant Secret, and starts proxying requests
+1. **You** create `Channel` CRDs in the operator namespace with real provider API keys
+2. **You** create a `Group` CRD per tenant, listing which channels they can use
+3. **Your tenants** create `ProxyKey` CRDs in their own namespaces referencing their Group
+4. **llmproxy** mints a virtual API key for each ProxyKey, stores it in a tenant Secret, and starts proxying requests
 
 ```
 Tenant app  ──POST /v1/chat/completions──▶  llmproxy  ──▶  OpenAI / Anthropic
                (virtual key)                  │
                                               │
-                                         Kubernetes CRDs
-                                         (no database needed)
+              ┌───────────────────────────────┘
+              │
+         Channel ──▶ Group ──▶ ProxyKey ──▶ Secret
+         (provider)  (tenant)  (key def)    (virtual key)
 ```
 
 ## Quick start
@@ -50,7 +53,24 @@ spec:
 EOF
 ```
 
-### 3. Give a tenant access
+### 3. Create a tenant Group
+
+```bash
+cat <<EOF | kubectl apply -f -
+apiVersion: llmproxy.llmproxy.io/v1alpha1
+kind: Group
+metadata:
+  name: my-team
+  namespace: llmproxy-system
+spec:
+  channelRefs: [openai]
+  status: Enabled
+EOF
+```
+
+### 4. Give a tenant access
+
+The Group is always the ProxyKey's namespace — no `groupRef` needed. Just create the key:
 
 ```bash
 cat <<EOF | kubectl apply -f -
@@ -58,23 +78,22 @@ apiVersion: llmproxy.llmproxy.io/v1alpha1
 kind: ProxyKey
 metadata:
   name: my-app
-  namespace: my-team
+  namespace: my-team          # must match a Group named "my-team"
 spec:
-  channelRef: openai
   models: [gpt-4o-mini]
   quota: 100          # optional: lifetime cost limit
   periodType: monthly # optional: daily | weekly | monthly
 EOF
 ```
 
-### 4. Get the virtual key
+### 5. Get the virtual key
 
 ```bash
 kubectl get secret my-app-llmproxy -n my-team \
   -o jsonpath='{.data.LLMPROXY_KEY}' | base64 -d
 ```
 
-### 5. Use it
+### 6. Use it
 
 ```bash
 curl -X POST http://llmproxy.llmproxy-system:8000/v1/chat/completions \
@@ -86,19 +105,18 @@ curl -X POST http://llmproxy.llmproxy-system:8000/v1/chat/completions \
 ## Features
 
 - **No database, no Redis** — everything lives in Kubernetes CRDs and Secrets
+- **Multi-tenancy** — `Group` CRDs define tenants with their own channel pools and rate limits
 - **Virtual API keys** — tenants never see your real provider keys
 - **Per-tenant isolation** — each ProxyKey lives in the tenant's namespace with its own Secret
 - **Model allowlists** — restrict which models each key can access
 - **Quota limits** — lifetime and period-based cost quotas
 - **IP restrictions** — limit keys to specific CIDR ranges
-- **Priority-weighted routing** — distribute load across multiple channels
+- **Priority-weighted routing** — distribute load across multiple channels within a group
 - **Automatic retry** — fails over to alternate channels on upstream errors
 - **SSE streaming** — response streaming passes through natively
 - **Prometheus metrics** — request counts, token usage, latency, costs, error rates
-- **Management API** — CRUD endpoints for channels and proxy keys
-- **Send to multiple LLM providers** — send to whatever provider matches the type on the channel. Supported out of the box:
-  - any OpenAI-compatible provider (OpenAI, DeepSeek, Groq, Together, OpenRouter, etc)
-  - Anthropic
+- **Management API** — CRUD endpoints for channels, groups, and proxy keys
+- **Send to multiple LLM providers** — OpenAI-compatible and Anthropic supported out of the box
 
 ## ProxyKey Secret
 
@@ -108,9 +126,38 @@ When a ProxyKey is created, llmproxy creates a Secret in the same namespace:
 |-----|-------|
 | `LLMPROXY_KEY` | The virtual API key (`sk-proxy-...`) |
 | `LLMPROXY_ENDPOINT` | URL to reach the proxy |
-| `LLMPROXY_CHANNEL` | Which channel this key routes to |
+| `LLMPROXY_CHANNEL` | Primary channel this key routes through |
+| `LLMPROXY_GROUP` | The Group (tenant) this key belongs to |
 
 The Secret is owned by the ProxyKey — deleting the ProxyKey automatically cleans up the Secret.
+
+## CLI (llmproxyctl)
+
+A small CLI ships inside the operator image. Run it via `kubectl exec`:
+
+```bash
+# Overall summary
+kubectl exec -n llmproxy-system deploy/llmproxy -- llmproxyctl status
+
+# List channels, groups, keys
+kubectl exec -n llmproxy-system deploy/llmproxy -- llmproxyctl status channels
+kubectl exec -n llmproxy-system deploy/llmproxy -- llmproxyctl status groups
+kubectl exec -n llmproxy-system deploy/llmproxy -- llmproxyctl status keys
+
+# Inspect a resource
+kubectl exec -n llmproxy-system deploy/llmproxy -- llmproxyctl channel openai
+kubectl exec -n llmproxy-system deploy/llmproxy -- llmproxyctl group team-a
+
+# Test a channel connection
+kubectl exec -n llmproxy-system deploy/llmproxy -- llmproxyctl test channel openai
+```
+
+Or run locally with port-forward:
+
+```bash
+kubectl port-forward -n llmproxy-system svc/llmproxy 8000:8000 &
+./scripts/llmproxyctl status
+```
 
 ## Prometheus metrics
 
@@ -118,10 +165,10 @@ Scrape `http://llmproxy.llmproxy-system:8081/metrics`:
 
 | Metric | Type | Labels |
 |--------|------|--------|
-| `llmproxy_requests_total` | Counter | channel, model, proxykey_ns, proxykey_name, status_code |
-| `llmproxy_tokens_total` | Counter | channel, model, type |
-| `llmproxy_cost_dollars_total` | Counter | channel, model |
-| `llmproxy_errors_total` | Counter | channel, model, error_type |
+| `llmproxy_requests_total` | Counter | channel, model, group, proxykey_ns, proxykey_name, status_code |
+| `llmproxy_tokens_total` | Counter | channel, model, group, type |
+| `llmproxy_cost_dollars_total` | Counter | channel, model, group |
+| `llmproxy_errors_total` | Counter | channel, model, group, error_type |
 | `llmproxy_rate_limited_total` | Counter | channel, tier, reason |
 | `llmproxy_request_duration_seconds` | Histogram | channel, model |
 | `llmproxy_ttfb_seconds` | Histogram | channel, model |
@@ -133,11 +180,12 @@ Scrape `http://llmproxy.llmproxy-system:8081/metrics`:
 
 ### Relay (port 8000)
 
-| Endpoint | Description |
-|----------|-------------|
-| `POST /v1/chat/completions` | OpenAI-compatible chat relay |
-| `POST /v1/messages` | Anthropic Messages API |
-| `GET /v1/models` | List available models |
+| Endpoint | Auth | Description |
+|----------|------|-------------|
+| `GET /api/status` | none | Overall status: channels, groups, keys |
+| `POST /v1/chat/completions` | Bearer key | OpenAI-compatible chat relay |
+| `POST /v1/messages` | Bearer key | Anthropic Messages API |
+| `GET /v1/models` | Bearer key | List available models |
 
 ### Health & metrics (port 8081)
 
@@ -156,6 +204,11 @@ Scrape `http://llmproxy.llmproxy-system:8081/metrics`:
 | `PUT /api/v1/channels/:name` | Update a channel |
 | `DELETE /api/v1/channels/:name` | Delete a channel |
 | `POST /api/v1/channels/:name/test` | Test a channel |
+| `GET /api/v1/groups` | List all groups |
+| `POST /api/v1/groups` | Create a group |
+| `PUT /api/v1/groups/:name` | Update a group |
+| `DELETE /api/v1/groups/:name` | Delete a group |
+| `GET /api/v1/proxykeys` | List all proxykeys |
 | `GET /api/v1/proxykeys/:ns/:name` | Get a proxykey |
 | `POST /api/v1/proxykeys` | Create a proxykey |
 | `DELETE /api/v1/proxykeys/:ns/:name` | Delete a proxykey |
@@ -248,7 +301,19 @@ spec:
   models: [test-model]
 EOF
 
-# Give a tenant access
+# Create a tenant Group (name matches tenant namespace for auto-inference)
+cat <<EOF | kubectl apply -f -
+apiVersion: llmproxy.llmproxy.io/v1alpha1
+kind: Group
+metadata:
+  name: my-team
+  namespace: llmproxy-system
+spec:
+  channelRefs: [test]
+  status: Enabled
+EOF
+
+# Give a tenant access — groupRef defaults to namespace "my-team"
 kubectl create namespace my-team
 cat <<EOF | kubectl apply -f -
 apiVersion: llmproxy.llmproxy.io/v1alpha1
@@ -256,8 +321,7 @@ kind: ProxyKey
 metadata:
   name: test-app
   namespace: my-team
-spec:
-  channelRef: test
+spec: {}
 EOF
 
 # Wait for reconciliation
