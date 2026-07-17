@@ -1,0 +1,297 @@
+apiVersion: apiextensions.k8s.io/v1
+kind: CustomResourceDefinition
+metadata:
+  name: channels.llmproxy.llmproxy.io
+spec:
+  group: llmproxy.llmproxy.io
+  scope: Namespaced
+  names:
+    kind: Channel
+    plural: channels
+    singular: channel
+    shortNames: [chan]
+  versions:
+    - name: v1alpha1
+      served: true
+      storage: true
+      subresources:
+        status: {}
+      additionalPrinterColumns:
+        - name: Type
+          type: string
+          jsonPath: .spec.type
+        - name: BaseURL
+          type: string
+          jsonPath: .spec.baseURL
+        - name: Status
+          type: string
+          jsonPath: .spec.status
+        - name: Priority
+          type: integer
+          jsonPath: .spec.priority
+        - name: Ready
+          type: boolean
+          jsonPath: .status.ready
+      schema:
+        openAPIV3Schema:
+          type: object
+          required: [spec]
+          properties:
+            spec:
+              type: object
+              required: [baseURL, type, keySecretRef]
+              properties:
+                baseURL:
+                  type: string
+                  pattern: '^https?://'
+                type:
+                  type: string
+                  enum: [openai, anthropic]
+                keySecretRef:
+                  type: object
+                  required: [name]
+                  properties:
+                    name:
+                      type: string
+                    key:
+                      type: string
+                      default: apiKey
+                priority:
+                  type: integer
+                  minimum: 1
+                  maximum: 1000000
+                  default: 10
+                status:
+                  type: string
+                  enum: [Enabled, Disabled]
+                  default: Enabled
+                models:
+                  type: array
+                  items:
+                    type: string
+                proxyURL:
+                  type: string
+                skipTLSVerify:
+                  type: boolean
+                modelMapping:
+                  type: object
+                  additionalProperties:
+                    type: string
+                config:
+                  type: object
+                  x-kubernetes-preserve-unknown-fields: true
+            status:
+              type: object
+              properties:
+                conditions:
+                  type: array
+                  items:
+                    type: object
+                    required: [type, status, reason, message, lastTransitionTime]
+                    properties:
+                      type:
+                        type: string
+                      status:
+                        type: string
+                        enum: ['True', 'False', 'Unknown']
+                      reason:
+                        type: string
+                      message:
+                        type: string
+                      lastTransitionTime:
+                        type: string
+                        format: date-time
+                      observedGeneration:
+                        type: integer
+                ready:
+                  type: boolean
+                message:
+                  type: string
+---
+apiVersion: apiextensions.k8s.io/v1
+kind: CustomResourceDefinition
+metadata:
+  name: proxykeys.llmproxy.llmproxy.io
+spec:
+  group: llmproxy.llmproxy.io
+  scope: Namespaced
+  names:
+    kind: ProxyKey
+    plural: proxykeys
+    singular: proxykey
+    shortNames: [pkey]
+  versions:
+    - name: v1alpha1
+      served: true
+      storage: true
+      subresources:
+        status: {}
+      additionalPrinterColumns:
+        - name: Group
+          type: string
+          jsonPath: .spec.groupRef
+        - name: Status
+          type: string
+          jsonPath: .spec.status
+        - name: Ready
+          type: boolean
+          jsonPath: .status.ready
+        - name: Secret
+          type: string
+          jsonPath: .status.secretName
+        - name: Message
+          type: string
+          jsonPath: .status.message
+      schema:
+        openAPIV3Schema:
+          type: object
+          required: [spec]
+          properties:
+            spec:
+              type: object
+              required: [groupRef]
+              properties:
+                groupRef:
+                  type: string
+                status:
+                  type: string
+                  enum: [Enabled, Disabled]
+                  default: Enabled
+                models:
+                  type: array
+                  items:
+                    type: string
+                quota:
+                  type: number
+                periodQuota:
+                  type: number
+                periodType:
+                  type: string
+                  enum: [daily, weekly, monthly]
+                  default: monthly
+                subnets:
+                  type: array
+                  items:
+                    type: string
+            status:
+              type: object
+              properties:
+                conditions:
+                  type: array
+                  items:
+                    type: object
+                    required: [type, status, reason, message, lastTransitionTime]
+                    properties:
+                      type:
+                        type: string
+                      status:
+                        type: string
+                        enum: ['True', 'False', 'Unknown']
+                      reason:
+                        type: string
+                      message:
+                        type: string
+                      lastTransitionTime:
+                        type: string
+                        format: date-time
+                      observedGeneration:
+                        type: integer
+                ready:
+                  type: boolean
+                message:
+                  type: string
+                keyHash:
+                  type: string
+                secretName:
+                  type: string
+                usedAmount:
+                  type: number
+                requestCount:
+                  type: integer
+---
+apiVersion: apiextensions.k8s.io/v1
+kind: CustomResourceDefinition
+metadata:
+  name: groups.llmproxy.llmproxy.io
+spec:
+  group: llmproxy.llmproxy.io
+  scope: Namespaced
+  names:
+    kind: Group
+    plural: groups
+    singular: group
+    shortNames: [grp]
+  versions:
+    - name: v1alpha1
+      served: true
+      storage: true
+      subresources:
+        status: {}
+      additionalPrinterColumns:
+        - name: Status
+          type: string
+          jsonPath: .spec.status
+        - name: Channels
+          type: string
+          jsonPath: .spec.channelRefs
+        - name: RPM
+          type: string
+          jsonPath: .spec.rpmRatio
+        - name: TPM
+          type: string
+          jsonPath: .spec.tpmRatio
+        - name: Ready
+          type: boolean
+          jsonPath: .status.ready
+      schema:
+        openAPIV3Schema:
+          type: object
+          required: [spec]
+          properties:
+            spec:
+              type: object
+              required: [channelRefs]
+              properties:
+                status:
+                  type: string
+                  enum: [Enabled, Disabled]
+                  default: Enabled
+                channelRefs:
+                  type: array
+                  items:
+                    type: string
+                rpmRatio:
+                  type: number
+                  minimum: 0
+                  default: 1.0
+                tpmRatio:
+                  type: number
+                  minimum: 0
+                  default: 1.0
+            status:
+              type: object
+              properties:
+                conditions:
+                  type: array
+                  items:
+                    type: object
+                    required: [type, status, reason, message, lastTransitionTime]
+                    properties:
+                      type:
+                        type: string
+                      status:
+                        type: string
+                        enum: ['True', 'False', 'Unknown']
+                      reason:
+                        type: string
+                      message:
+                        type: string
+                      lastTransitionTime:
+                        type: string
+                        format: date-time
+                      observedGeneration:
+                        type: integer
+                ready:
+                  type: boolean
+                message:
+                  type: string
