@@ -84,7 +84,7 @@ spec:
       serviceAccountName: llmproxy-operator
       containers:
         - name: llmproxy
-          image: ghcr.io/YOURORG/llmproxy-operator:latest
+          image: ghcr.io/YOURORG/llmproxy-k8s:latest
           env:
             - name: OPERATOR_NAMESPACE
               valueFrom:

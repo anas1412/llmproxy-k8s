@@ -1,5 +1,5 @@
 {
-  "name": "llmproxy-operator",
+  "name": "llmproxy-k8s",
   "version": "1.0.0",
   "description": "Production LLM Proxy Operator — NestJS",
   "main": "dist/main.js",

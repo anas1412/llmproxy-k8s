@@ -1,4 +1,4 @@
-# llmproxy
+# llmproxy-k8s
 
 A lightweight Kubernetes-native LLM proxy — give your tenants API keys that forward to your LLM providers. No database, no Redis. Just CRDs and Secrets.
 
