@@ -128,6 +128,17 @@ When a ProxyKey is created, llmproxy creates a Secret in the same namespace:
 
 The Secret is owned by the ProxyKey — deleting the ProxyKey automatically cleans up the Secret.
 
+### IP whitelisting
+
+Restrict a ProxyKey to specific IP ranges using CIDR notation. Requests from IPs outside the list are rejected with 401.
+
+```yaml
+spec:
+  subnets: [10.0.0.0/8, 192.168.1.0/24]
+```
+
+Supports IPv4 CIDR and IPv6-mapped IPv4 addresses (common with Kubernetes CNIs). An empty or absent `subnets` field allows all IPs.
+
 ## CLI (llmproxyctl)
 
 A small CLI ships inside the operator image. Run it via `kubectl exec`:
