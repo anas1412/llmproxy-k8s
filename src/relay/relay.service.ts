@@ -171,9 +171,21 @@ export class RelayService {
               });
             } else {
               res.writeHead(upRes.statusCode ?? 502, upRes.headers);
-              upRes.pipe(res);
+              let lastData = '';
+              upRes.on('data', (chunk: Buffer) => {
+                // Track the last SSE data chunk to extract usage on end
+                const text = chunk.toString('utf8');
+                for (const line of text.split('\n')) {
+                  if (line.startsWith('data: ') && !line.startsWith('data: [DONE]')) {
+                    lastData = line.slice(6);
+                  }
+                }
+                res.write(chunk);
+              });
               upRes.on('end', () => {
+                res.end();
                 const upstreamMs = Date.now() - upstreamStart;
+                const usage = this.extractUsage(lastData);
                 this.metrics.upstreamDuration.observe(
                   { channel: channel.metadata!.name!, model },
                   upstreamMs / 1000,
@@ -182,7 +194,8 @@ export class RelayService {
                   statusCode: upRes.statusCode ?? 502,
                   success: (upRes.statusCode ?? 502) < 400,
                   channel: channel.metadata!.name!, model,
-                  inputTokens: 0, outputTokens: 0, latencyMs: Date.now() - startTime, ttfbMs, retries: 0,
+                  inputTokens: usage?.input ?? 0, outputTokens: usage?.output ?? 0,
+                  latencyMs: Date.now() - startTime, ttfbMs, retries: 0,
                 });
               });
             }

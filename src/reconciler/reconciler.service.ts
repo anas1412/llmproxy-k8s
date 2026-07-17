@@ -107,6 +107,7 @@ export class ReconcilerService {
       namespace: ns,
       proxyKeyName: name,
       models: pk.spec.models?.length ? pk.spec.models : undefined,
+      subnets: pk.spec.subnets?.length ? pk.spec.subnets : undefined,
     });
 
     if (pk.status?.keyHash !== keyHash || pk.status?.ready !== true || pk.status?.secretName !== secretName) {

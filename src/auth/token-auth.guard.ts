@@ -1,7 +1,7 @@
 import { Injectable, type CanActivate, type ExecutionContext } from '@nestjs/common';
 import type { Request } from 'express';
 import { RegistryService } from '../registry/registry.service.js';
-import { hashKey, hashesEqual } from '../common/key-utils.js';
+import { hashKey, ipInSubnets } from '../common/key-utils.js';
 import type { Route } from '../common/types.js';
 
 /** Attached to the request by TokenAuthGuard on successful auth */
@@ -21,6 +21,12 @@ export class TokenAuthGuard implements CanActivate {
     const h = hashKey(key);
     const route = this.registry.lookup(h);
     if (!route) return false;
+
+    // IP whitelist check
+    if (route.subnets?.length) {
+      const clientIP = req.ip ?? req.socket.remoteAddress ?? '';
+      if (!ipInSubnets(clientIP, route.subnets)) return false;
+    }
 
     // Attach route for downstream handlers
     (req as AuthenticatedRequest).route = route;

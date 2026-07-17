@@ -121,6 +121,7 @@ export interface Route {
   namespace: string;
   proxyKeyName: string;
   models?: string[];
+  subnets?: string[];
 }
 
 /** A channel entry in the registry — the CRD + resolved upstream key */
